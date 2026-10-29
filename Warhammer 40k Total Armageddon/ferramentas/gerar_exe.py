@@ -4,9 +4,11 @@ import subprocess
 import sys
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARTEFATOS = os.path.join(RAIZ, "artefatos")
 
 
 def main():
+    os.makedirs(ARTEFATOS, exist_ok=True)
     comando = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
@@ -16,8 +18,8 @@ def main():
         "--contents-directory", ".",
         "--name", "Total Armageddon",
         "--icon", os.path.join(RAIZ, "icone_jogo.ico"),
-        "--distpath", os.path.join(RAIZ, "dist"),
-        "--workpath", os.path.join(RAIZ, "build"),
+        "--distpath", os.path.join(ARTEFATOS, "dist"),
+        "--workpath", os.path.join(ARTEFATOS, "build"),
     ]
 
     recursos = (
@@ -41,7 +43,7 @@ def main():
     subprocess.run(comando, cwd=RAIZ, check=True)
     print(
         "Executavel criado em: "
-        + os.path.join(RAIZ, "dist", "Total Armageddon", "Total Armageddon.exe")
+        + os.path.join(ARTEFATOS, "dist", "Total Armageddon", "Total Armageddon.exe")
     )
 
 

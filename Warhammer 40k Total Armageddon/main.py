@@ -2834,9 +2834,10 @@ def executar_menu_principal(relogio, menu_principal):
             if acao:
                 return acao[0]
         menu_principal.tela = pygame.display.get_surface()
+        delta = min(relogio.tick(FPS) / 1000.0, 0.1)
+        menu_principal.atualizar(delta)
         menu_principal.desenhar()
         pygame.display.flip()
-        relogio.tick(FPS)
 
 
 def executar_fluxo_menus(tela, relogio, menu_principal, menu):

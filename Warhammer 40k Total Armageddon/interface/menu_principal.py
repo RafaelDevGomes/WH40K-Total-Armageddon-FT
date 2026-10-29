@@ -13,9 +13,8 @@ A Campanha e uma tela provisoria (ainda em desenvolvimento). As Configuracoes
 mexem no volume dos efeitos e da musica, no som mudo e na tela cheia; os
 valores de audio sao salvos por `ao_salvar(dict)` ao soltar um controle.
 """
-import os
-
 import pygame
+from .animated_background import AnimatedMenuBackground
 
 from .hud import (FUNDO, FUNDO_CLARO, LATAO, LATAO_ESCURO, LATAO_BRILHO, PERGAMINHO,
                   TEXTO_APAGADO, SANGUE, ALERTA, PRETO, _poligono)
@@ -47,13 +46,7 @@ class MenuPrincipal:
         self._sliders = {}
         self._arrastando = None
         self._fontes = {}
-        self._fundo_cache = None
-        self._fundo_img = None
-        if fundo and os.path.exists(fundo):
-            try:
-                self._fundo_img = pygame.image.load(fundo).convert()
-            except (pygame.error, FileNotFoundError):
-                self._fundo_img = None
+        self.fundo_animado = AnimatedMenuBackground(fundo, tela.get_size()) if fundo else None
 
     def abrir(self):
         self.pagina = "principal"
@@ -61,6 +54,8 @@ class MenuPrincipal:
 
     # ------------------------------------------------------------ eventos
     def processar_evento(self, ev):
+        if self.fundo_animado:
+            self.fundo_animado.tratar_evento(ev)
         if ev.type == pygame.MOUSEMOTION:
             self.mouse = ev.pos
             if self._arrastando:
@@ -97,6 +92,11 @@ class MenuPrincipal:
                 elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     return self._acao(BOTOES_PRINCIPAIS[self.indice][0])
         return None
+
+    def atualizar(self, delta):
+        """Atualiza apenas a animacao do fundo, em segundos por quadro."""
+        if self.fundo_animado:
+            self.fundo_animado.atualizar(delta)
 
     def _acao(self, nome):
         if nome == "batalha":
@@ -142,6 +142,14 @@ class MenuPrincipal:
             self._fontes[k] = pygame.font.SysFont(self.fonte_nome, k, bold=True)
         return self._fontes[k]
 
+    def _criar_faiscas(self):
+        rng = random.Random(40000)
+        return [
+            (rng.random(), rng.random(), rng.uniform(0.12, 0.3),
+             rng.uniform(1.0, 2.4), rng.uniform(8.0, 34.0), rng.uniform(0.4, 1.4))
+            for _ in range(34)
+        ]
+
     def _texto(self, txt, tam, cor, pos, ancora="topleft", sombra=True):
         f = self._f(tam)
         img = f.render(str(txt), True, cor)
@@ -174,26 +182,19 @@ class MenuPrincipal:
                         "midright", sombra=False)
         self._botoes[nome] = rect
 
-    def _fundo(self, W, H):
-        if self._fundo_cache is not None and self._fundo_cache.get_size() == (W, H):
-            return self._fundo_cache
-        surf = pygame.Surface((W, H))
-        if self._fundo_img is not None:
-            iw, ih = self._fundo_img.get_size()
-            esc = max(W / iw, H / ih)
-            img = pygame.transform.smoothscale(
-                self._fundo_img, (max(1, int(iw * esc)), max(1, int(ih * esc))))
-            surf.blit(img, img.get_rect(center=(W // 2, H // 2)))
-            veu = pygame.Surface((W, H), pygame.SRCALPHA)
-            veu.fill((8, 9, 7, 165))                 # escurece para o texto ficar legivel
-            surf.blit(veu, (0, 0))
-        else:
-            for y in range(H):
-                k = y / max(1, H - 1)
-                pygame.draw.line(surf, (int(14 + 26 * k), int(15 + 3 * k), int(12 + 2 * k)),
-                                 (0, y), (W, y))
-        self._fundo_cache = surf
-        return surf
+    def _botao_lateral(self, nome, rect, texto, etiqueta=None, foco=False):
+        hover = rect.collidepoint(self.mouse) or foco
+        cor = LATAO_BRILHO if hover else PERGAMINHO
+        self._texto(texto, 17, cor, rect.midright, "midright")
+        if hover:
+            ponta = [(rect.left - self._e(14), rect.centery),
+                     (rect.left - self._e(7), rect.centery - self._e(5)),
+                     (rect.left - self._e(7), rect.centery + self._e(5))]
+            pygame.draw.polygon(self.tela, LATAO_BRILHO, ponta)
+        if etiqueta:
+            self._texto(etiqueta, 8, ALERTA, (rect.right, rect.bottom + self._e(4)),
+                        "bottomright", sombra=False)
+        self._botoes[nome] = rect
 
     def _losango(self, c, r):
         pygame.draw.polygon(self.tela, LATAO_BRILHO, [(c[0], c[1] - r), (c[0] + r, c[1]),
@@ -212,13 +213,20 @@ class MenuPrincipal:
         def R(x, y, w, h):          # coordenadas de projeto (1280x720), centradas na tela
             return pygame.Rect(cx - e(640) + e(x), e(y), e(w), e(h))
 
-        t.blit(self._fundo(W, H), (0, 0))
-        self._texto("WARHAMMER 40,000", 20, TEXTO_APAGADO, (cx, e(112)), "center")
-        self._texto("TOTAL ARMAGEDDON", 52, LATAO_BRILHO, (cx, e(166)), "center")
-        for x0, x1 in ((cx - e(300), cx - e(24)), (cx + e(24), cx + e(300))):
-            pygame.draw.line(t, LATAO, (x0, e(218)), (x1, e(218)), 2)
-            pygame.draw.line(t, LATAO_ESCURO, (x0, e(224)), (x1, e(224)), 1)
-        self._losango((cx, e(218)), e(6))
+        if self.fundo_animado:
+            self.fundo_animado.desenhar(t)
+        else:
+            t.fill(FUNDO)
+        titulo_direita = cx - e(640) + e(1200)
+        self._texto("WARHAMMER 40,000", 11, TEXTO_APAGADO,
+                    (titulo_direita, e(96)), "midright")
+        self._texto("TOTAL ARMAGEDDON", 28, LATAO_BRILHO,
+                    (titulo_direita, e(132)), "midright")
+        for x0, x1 in ((titulo_direita - e(360), titulo_direita - e(14)),
+                       (titulo_direita + e(14), titulo_direita + e(20))):
+            pygame.draw.line(t, LATAO, (x0, e(162)), (x1, e(162)), 2)
+            pygame.draw.line(t, LATAO_ESCURO, (x0, e(168)), (x1, e(168)), 1)
+        self._losango((titulo_direita, e(162)), e(4))
 
         if self.pagina == "principal":
             self._pagina_principal(R)
@@ -229,11 +237,12 @@ class MenuPrincipal:
 
     def _pagina_principal(self, R):
         for i, (nome, rotulo, etiqueta) in enumerate(BOTOES_PRINCIPAIS):
-            self._botao(nome, R(460, 266 + i * 68, 360, 52), rotulo, 15,
-                        destaque=(nome == "batalha"), etiqueta=etiqueta,
-                        foco=(i == self.indice))
-        self._texto("Setas + ENTER ou mouse  -  F11: tela cheia", 9, TEXTO_APAGADO,
-                    (self.tela.get_width() // 2, self._e(694)), "center")
+            self._botao_lateral(nome, R(900, 252 + i * 52, 300, 42), rotulo,
+                                etiqueta=etiqueta, foco=(i == self.indice))
+        self._texto("SETAS + ENTER  |  F11: TELA CHEIA", 9, TEXTO_APAGADO,
+                    (self.tela.get_width() - self._e(28), self._e(684)), "bottomright")
+        self._texto("Equipe responsável: Equipe-Santa-Lúzia.", 9, TEXTO_APAGADO,
+                (self._e(28), self._e(706)), "bottomleft")
 
     def _pagina_campanha(self, R):
         painel = R(340, 262, 600, 280)

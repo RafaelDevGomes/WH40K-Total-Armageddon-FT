@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 dist/
+artefatos/
 *.egg-info/
 
 # Env & secrets

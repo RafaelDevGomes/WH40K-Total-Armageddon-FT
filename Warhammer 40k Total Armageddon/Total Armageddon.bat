@@ -15,5 +15,5 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo Abra: dist\Total Armageddon\Total Armageddon.exe
+echo Abra: artefatos\dist\Total Armageddon\Total Armageddon.exe
 pause
