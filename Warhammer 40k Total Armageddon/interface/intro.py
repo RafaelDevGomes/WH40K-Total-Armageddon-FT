@@ -5,32 +5,51 @@ Tudo e opcional. Sem arquivos, o jogo vai direto ao menu. O video usa OpenCV
 Qualquer tecla ou clique pula a abertura.
 """
 import os
+import importlib
+import sys
 import time
 
 import pygame
 
 
+def _importar_cv2():
+    """Importa o OpenCV instalado, sem deixar a copia local incompleta sombreá-lo."""
+    pasta_projeto = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    caminhos_originais = sys.path[:]
+    modulo_anterior = sys.modules.pop("cv2", None)
+    try:
+        sys.path = [
+            caminho for caminho in sys.path
+            if os.path.abspath(caminho or os.getcwd()) != pasta_projeto
+        ]
+        return importlib.import_module("cv2")
+    except ImportError:
+        if modulo_anterior is not None:
+            sys.modules["cv2"] = modulo_anterior
+        return None
+    finally:
+        sys.path = caminhos_originais
+
+
 def _abrir_video(caminho):
     if not os.path.exists(caminho):
-        return None
-    try:
-        import cv2
-    except ImportError:
-        return None
+        return None, None
+    cv2 = _importar_cv2()
+    if cv2 is None:
+        return None, None
     abrir = getattr(cv2, "VideoCapture", None)
     if not callable(abrir) or not callable(getattr(cv2, "cvtColor", None)):
-        return None
+        return None, None
     if not hasattr(cv2, "COLOR_BGR2RGB"):
-        return None
+        return None, None
     cap = abrir(caminho)
     if not cap.isOpened():
         cap.release()
-        return None
-    return cap
+        return None, None
+    return cap, cv2
 
 
-def _desenhar_frame(frame):
-    import cv2
+def _desenhar_frame(frame, cv2):
     tela = pygame.display.get_surface()
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w = rgb.shape[:2]
@@ -44,14 +63,13 @@ def _desenhar_frame(frame):
 
 def tocar_intro(tela, relogio, pasta_projeto, audio):
     """Devolve False se a janela foi fechada durante a abertura, True caso contrario."""
-    cap = _abrir_video(os.path.join(pasta_projeto, "video", "intro.mp4"))
+    cap, cv2 = _abrir_video(os.path.join(pasta_projeto, "video", "intro.mp4"))
     tem_audio = audio.tem_musica("intro")
     if cap is None and not tem_audio:
         return True
     fps = 30.0
     if cap is not None:
         try:
-            import cv2
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         except Exception:
             cap = None
@@ -77,7 +95,7 @@ def tocar_intro(tela, relogio, pasta_projeto, audio):
                         break
                     frame, ultimo = atual, ultimo + 1
                 if frame is not None:
-                    _desenhar_frame(frame)
+                    _desenhar_frame(frame, cv2)
             else:
                 pygame.display.get_surface().fill((0, 0, 0))
                 if t > 0.5 and not pygame.mixer.music.get_busy():
